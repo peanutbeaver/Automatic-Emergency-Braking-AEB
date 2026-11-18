@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build libgtest-dev \
+            gcc-arm-none-eabi qemu-system-arm cppcheck
+
+      - name: Unit tests
+        run: |
+          cmake --preset host
+          cmake --build --preset host
+          ctest --preset host
+
+      - name: Unit tests (ASan + UBSan)
+        run: |
+          cmake --preset host-asan
+          cmake --build --preset host-asan
+          ctest --preset host-asan
+
+      - name: SIL scenarios
+        run: ./build/host/aeb_sil --csv out
+
+      - name: Firmware build (Cortex-M3)
+        run: |
+          cmake --preset cortex-m3
+          cmake --build --preset cortex-m3
+
+      - name: PIL on QEMU, compare with SIL
+        run: ./tools/compare_sil_pil.sh
+
+      - name: Static analysis
+        run: ./tools/static_analysis.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-and-sim-results
+          path: |
+            build/cortex-m3/target/aeb_firmware.elf
+            build/cortex-m3/target/aeb_firmware.map
+            out/*.csv
